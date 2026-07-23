@@ -114,6 +114,18 @@ npm test                        # unit tests
 npm run build                   # emit dist/
 ```
 
+## Release
+
+There is no CI. Verify locally before publishing:
+
+```bash
+npm run typecheck && npm test && npm run build
+npm pack --dry-run     # confirm dist/ and templates/ are included
+npm publish --access public
+```
+
+`npm publish` runs `build` first via `prepublishOnly`.
+
 ## License
 
 MIT
