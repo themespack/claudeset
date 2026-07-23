@@ -32,5 +32,6 @@ Reusable prompts live in `.claude/prompts/` and are addressable inline, e.g.
 - Match the style of surrounding code.
 - Prefer small, verifiable changes.
 - Run the project's tests/linters before declaring work done.
+- **No CI.** Do not add GitHub Actions workflows — verify locally instead.
 
 <!-- Add project-specific rules below. claudeset will not overwrite this file. -->

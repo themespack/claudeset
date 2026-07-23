@@ -14,6 +14,19 @@ Rules for any AI agent working in this repository.
 - Overwrite or delete memory files wholesale.
 - Commit secrets, `.env` files, or credentials.
 - Introduce a dependency without noting it in `stack.md`.
+- Add GitHub Actions workflows. This project does not use CI — see below.
+
+## No CI
+
+There is no `.github/workflows/` here, and none should be added. Verify
+locally instead, and report the real output:
+
+```bash
+npm run typecheck && npm test && npm run build
+```
+
+If the project uses a different toolchain, use its equivalent and record the
+command in `.claude/memories/stack.md`.
 
 ## Workflow
 
