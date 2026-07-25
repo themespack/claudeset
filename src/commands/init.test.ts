@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runInit } from "./init.js";
 import { runDoctor } from "./doctor.js";
+import { skillsAdd } from "./skills.js";
 import type { InitOptions } from "../types.js";
 
 let dir: string;
@@ -49,6 +50,14 @@ describe("init", () => {
   it("honours --no-caveman even when the skill is selected", async () => {
     await runInit(dir, options({ preset: "none", skills: ["caveman"], caveman: false }));
     expect(existsSync(join(dir, ".caveman"))).toBe(false);
+  });
+
+  it("adds Caveman scaffolding when the skill arrives after init", async () => {
+    await runInit(dir, options({ preset: "none" }));
+    expect(existsSync(join(dir, ".caveman"))).toBe(false);
+    skillsAdd(dir, ["caveman"]);
+    expect(existsSync(join(dir, ".caveman", "CAVEMAN.md"))).toBe(true);
+    expect(runDoctor(dir)).toBe(0);
   });
 
   it("writes nothing on dry-run", async () => {

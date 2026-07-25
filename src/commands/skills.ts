@@ -5,6 +5,7 @@ import { buildVars } from "../template/index.js";
 import { SKILL_CATALOG, findSkill } from "../catalog/skills.js";
 import { PRESETS, resolvePreset, type PresetName } from "../catalog/presets.js";
 import { installSkills } from "../catalog/install.js";
+import { installCaveman } from "../memory/index.js";
 import { listSkills, linkProjectSkills } from "../global/skills.js";
 import { printResults } from "./summary.js";
 import { log } from "../utils/log.js";
@@ -44,11 +45,16 @@ export function skillsAdd(
   }
 
   const info = detectProject(root);
-  const results = installSkills(root, selected, buildVars(info), {
-    force: opts.force,
-    dryRun: opts.dryRun,
-  });
+  const vars = buildVars(info);
+  const writeOpts = { force: opts.force, dryRun: opts.dryRun };
+  const results = installSkills(root, selected, vars, writeOpts);
   linkProjectSkills(root, { dryRun: opts.dryRun });
+
+  // The Caveman skill makes detectCaveman true, so the scaffolding it implies
+  // has to exist too — otherwise `doctor` fails on the project we just set up.
+  if (selected.includes("caveman")) {
+    results.push(...installCaveman(root, vars, writeOpts));
+  }
 
   log.title(`Skills (${selected.length} selected)`);
   printResults(root, results);
