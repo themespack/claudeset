@@ -8,6 +8,7 @@ import { CAVEMAN_DIR } from "../memory/caveman.js";
 import { listServers } from "../mcp/index.js";
 import { listHooks } from "../hooks/index.js";
 import { invalidSkills, listSkills } from "../global/skills.js";
+import { missingRuntimes } from "../catalog/install.js";
 import { log } from "../utils/log.js";
 import type { CheckResult } from "../types.js";
 
@@ -108,6 +109,13 @@ export function runDoctor(root: string): number {
     `  MCP servers: ${servers.length ? servers.join(", ") : chalk.dim("none")}`,
   );
   log.info(`  Hooks: ${hooks.length ? String(hooks.length) : chalk.dim("none")}`);
+
+  // A configured server whose runtime is missing fails silently at startup.
+  for (const missing of missingRuntimes(servers)) {
+    log.warn(
+      `${missing.runtime} not on PATH — ${missing.servers.join(", ")} will not start. ${missing.hint}`,
+    );
+  }
 
   log.title("Project");
   log.info(

@@ -99,15 +99,13 @@ async function chooseExtras(opts: InitOptions): Promise<Selection> {
 }
 
 export async function runInit(root: string, opts: InitOptions): Promise<void> {
-  const caveman =
-    opts.caveman === "auto" ? detectProject(root).caveman : opts.caveman;
-  const info = detectProject(root, { caveman, rtk: opts.rtk });
-  const vars = buildVars(info);
+  const detected = detectProject(root);
   const writeOpts = { force: opts.force, dryRun: opts.dryRun };
 
   log.title("claudeset init");
   log.dim(
-    `  project: ${vars.projectName}  ·  framework: ${info.framework}  ·  ${vars.language}` +
+    `  project: ${buildVars(detected).projectName}  ·  framework: ${detected.framework}` +
+      `  ·  ${detected.hasTypeScript ? "TypeScript" : "JavaScript"}` +
       (opts.dryRun ? "  ·  (dry-run)" : ""),
   );
 
@@ -115,7 +113,7 @@ export async function runInit(root: string, opts: InitOptions): Promise<void> {
     const { go } = await prompts({
       type: "confirm",
       name: "go",
-      message: `Scaffold Claude Code into ./${vars.projectName}?`,
+      message: `Scaffold Claude Code into ./${buildVars(detected).projectName}?`,
       initial: true,
     });
     if (!go) {
@@ -125,6 +123,15 @@ export async function runInit(root: string, opts: InitOptions): Promise<void> {
   }
 
   const selection = await chooseExtras(opts);
+
+  // Picking the Caveman skill counts as enabling Caveman, so the scaffolding it
+  // expects gets created in the same run.
+  const caveman =
+    opts.caveman === "auto"
+      ? detected.caveman || selection.skills.includes("caveman")
+      : opts.caveman;
+  const info = detectProject(root, { caveman, rtk: opts.rtk });
+  const vars = buildVars(info);
 
   const results: WriteResult[] = [];
 
