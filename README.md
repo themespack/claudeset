@@ -10,6 +10,27 @@ cd my-project
 claudeset init
 ```
 
+## Install from GitHub
+
+`dist/` is not committed; the build runs from the `prepare` script when npm
+resolves the repo.
+
+```bash
+# as a project dependency
+npm install github:themespack/claudeset
+
+# globally, on a new machine
+git clone https://github.com/themespack/claudeset.git
+cd claudeset
+npm install     # installs deps and builds dist/
+npm link        # puts `claudeset` on your PATH
+claudeset global
+```
+
+`npm install -g github:themespack/claudeset` is **not** reliable: npm 10 runs
+`prepare` before installing the clone's dependencies, so the TypeScript build
+fails. Use `npm link` (above) or install the published package from npm.
+
 ## Why
 
 Every new project needs the same Claude Code foundation: a `CLAUDE.md`, an
