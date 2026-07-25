@@ -102,6 +102,36 @@ Servers needing an API key or a non-Node runtime are marked in the catalog.
 After installing, claudeset prints the environment variables to set and warns
 when `uv` or `docker` is missing — it never writes secrets anywhere.
 
+### Other agents
+
+`.mcp.json` is Claude Code's format. `mcp sync` mirrors it into the file each
+other agent reads, keeping every key those files already contain:
+
+```bash
+claudeset mcp sync                      # all of them
+claudeset mcp sync --agents cursor,zed
+claudeset mcp sync --dry-run
+```
+
+| Agent | File | Where servers go |
+|---|---|---|
+| Claude Code | `.mcp.json` | `mcpServers` (source of truth) |
+| Cursor | `.cursor/mcp.json` | `mcpServers` |
+| VS Code / Copilot | `.vscode/mcp.json` | `servers`, each with `"type": "stdio"` |
+| Gemini CLI | `.gemini/settings.json` | `mcpServers` |
+| Zed | `.zed/settings.json` | `context_servers` (JSONC, comments preserved) |
+| Codex CLI | `.codex/config.toml` | appended `[mcp_servers.<name>]` tables |
+
+Sync only ever adds what is missing; it never edits or removes a server you
+configured yourself, and it backs the file up as `*.claudeset.bak`. `doctor`
+lists which of these files exist and which have fallen behind `.mcp.json`.
+
+Skills need no mirroring. Claude Code reads `.claude/skills`, and Zed and Codex
+read `.agents/skills`, which `init` links to it. For agents with no skills
+support at all, `init` and `skills add` maintain a `claudeset` block in
+`AGENTS.md` that lists the installed skills and their paths — Cursor, Gemini CLI
+and Copilot pick them up from there.
+
 ### Skill catalog
 
 RTK · Caveman · Clean Architecture · Code Review · Refactoring · TypeScript ·

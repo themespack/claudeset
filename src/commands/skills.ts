@@ -6,6 +6,7 @@ import { SKILL_CATALOG, findSkill } from "../catalog/skills.js";
 import { PRESETS, resolvePreset, type PresetName } from "../catalog/presets.js";
 import { installSkills } from "../catalog/install.js";
 import { installCaveman } from "../memory/index.js";
+import { refreshSkillsBlock } from "../agents/skills-block.js";
 import { listSkills, linkProjectSkills } from "../global/skills.js";
 import { printResults } from "./summary.js";
 import { log } from "../utils/log.js";
@@ -55,6 +56,9 @@ export function skillsAdd(
   if (selected.includes("caveman")) {
     results.push(...installCaveman(root, vars, writeOpts));
   }
+
+  const block = refreshSkillsBlock(root, { dryRun: opts.dryRun });
+  if (block) results.push(block);
 
   log.title(`Skills (${selected.length} selected)`);
   printResults(root, results);

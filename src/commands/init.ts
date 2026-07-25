@@ -10,6 +10,7 @@ import { SKILL_CATALOG } from "../catalog/skills.js";
 import { PRESETS, resolvePreset, type PresetName } from "../catalog/presets.js";
 import { installMcp, installSkills } from "../catalog/install.js";
 import { reportPrerequisites } from "./mcp.js";
+import { refreshSkillsBlock } from "../agents/skills-block.js";
 import { linkProjectSkills, type LinkResult } from "../global/skills.js";
 import { actionLabel, log } from "../utils/log.js";
 import type { InitOptions, WriteResult } from "../types.js";
@@ -155,6 +156,8 @@ export async function runInit(root: string, opts: InitOptions): Promise<void> {
   results.push(...copyTemplateTree("claude/skills", join(root, ".claude", "skills"), vars, writeOpts));
   results.push(...installSkills(root, selection.skills, vars, writeOpts));
   reportSkillLink(linkProjectSkills(root, { dryRun: opts.dryRun }));
+  const skillsBlock = refreshSkillsBlock(root, { dryRun: opts.dryRun });
+  if (skillsBlock) results.push(skillsBlock);
 
   // 3. RTK memory + prompt library.
   if (info.rtk) {

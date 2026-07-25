@@ -9,6 +9,7 @@ import { listServers } from "../mcp/index.js";
 import { listHooks } from "../hooks/index.js";
 import { invalidSkills, listSkills } from "../global/skills.js";
 import { missingRuntimes } from "../catalog/install.js";
+import { AGENT_TARGETS, readAgentServers } from "../agents/targets.js";
 import { log } from "../utils/log.js";
 import type { CheckResult } from "../types.js";
 
@@ -109,6 +110,23 @@ export function runDoctor(root: string): number {
     `  MCP servers: ${servers.length ? servers.join(", ") : chalk.dim("none")}`,
   );
   log.info(`  Hooks: ${hooks.length ? String(hooks.length) : chalk.dim("none")}`);
+
+  // Other agents keep their own copy; report which ones exist and lag behind.
+  for (const target of AGENT_TARGETS) {
+    if (target.id === "claude" || !exists(join(root, target.file))) continue;
+    const theirs = readAgentServers(root, target.id);
+    if (theirs === null) {
+      log.warn(`${target.file} could not be read`);
+      continue;
+    }
+    const behind = servers.filter((name) => !(name in theirs));
+    const label = `  ${target.title}: ${target.file}`;
+    if (behind.length) {
+      log.info(`${label} ${chalk.yellow(`missing ${behind.join(", ")}`)} — run \`claudeset mcp sync\``);
+    } else {
+      log.info(`${label} ${chalk.dim("in sync")}`);
+    }
+  }
 
   // A configured server whose runtime is missing fails silently at startup.
   for (const missing of missingRuntimes(servers)) {

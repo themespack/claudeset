@@ -12,6 +12,7 @@ import {
   mcpInstall,
   mcpList,
   mcpRemove,
+  mcpSync,
   parseScope,
   parseTarget,
 } from "./commands/mcp.js";
@@ -20,6 +21,7 @@ import { runGlobal, runGlobalStatus } from "./commands/global.js";
 import { MCP_CATALOG } from "./catalog/mcp.js";
 import { SKILL_CATALOG } from "./catalog/skills.js";
 import { parseIds, parsePreset } from "./catalog/presets.js";
+import { parseAgents } from "./agents/targets.js";
 import { hooksAdd, hooksList } from "./commands/hooks.js";
 import { runClean } from "./commands/clean.js";
 import type { InitOptions } from "./types.js";
@@ -157,6 +159,15 @@ mcp
       scope: parseScope(o.scope),
       target: parseTarget(o.target),
     });
+  });
+
+mcp
+  .command("sync")
+  .description("Mirror .mcp.json into Cursor, VS Code, Gemini, Zed and Codex config.")
+  .option("-a, --agents <ids>", "comma-separated: cursor, vscode, gemini, zed, codex")
+  .option("--dry-run", "preview without writing", false)
+  .action((o) => {
+    mcpSync(process.cwd(), parseAgents(o.agents), { dryRun: Boolean(o.dryRun) });
   });
 
 const skills = program

@@ -12,6 +12,12 @@ import { claudeConfigPath, zedSettingsPath } from "../global/paths.js";
 import { MCP_CATALOG, resolveServer } from "../catalog/mcp.js";
 import { PRESETS, resolvePreset, type PresetName } from "../catalog/presets.js";
 import { installMcp, missingRuntimes, requiredEnv } from "../catalog/install.js";
+import {
+  findAgent,
+  readAgentServers,
+  writeAgentServers,
+  type AgentId,
+} from "../agents/targets.js";
 import { log } from "../utils/log.js";
 
 /** `project` writes `.mcp.json`; `user` writes the machine-wide configs. */
@@ -141,6 +147,51 @@ export function reportPrerequisites(ids: string[]): void {
       `${missing.runtime} not found on PATH — ${missing.servers.join(", ")} will not start. ${missing.hint}`,
     );
   }
+}
+
+/**
+ * Mirror `.mcp.json` into the other agents' config files so one project setup
+ * serves Cursor, VS Code, Gemini, Zed and Codex as well as Claude Code.
+ */
+export function mcpSync(
+  root: string,
+  agents: AgentId[],
+  opts: { dryRun?: boolean } = {},
+): void {
+  const servers = listServers(root);
+  const names = Object.keys(servers);
+
+  log.title(`Sync MCP servers to other agents (${names.length} server(s))`);
+  if (names.length === 0) {
+    log.warn("`.mcp.json` has no servers yet. Run `claudeset mcp add --preset standard` first.");
+    return;
+  }
+
+  for (const id of agents) {
+    if (id === "claude") continue; // the source of truth
+    const target = findAgent(id)!;
+    const before = readAgentServers(root, id);
+    if (before === null) {
+      log.fail(`${target.title.padEnd(18)} ${target.file} — unreadable, left untouched`);
+      continue;
+    }
+
+    const missing = Object.fromEntries(names.filter((n) => !(n in before)).map((n) => [n, servers[n]]));
+    if (Object.keys(missing).length === 0) {
+      log.ok(`${target.title.padEnd(18)} ${target.file} — already in sync`);
+      continue;
+    }
+
+    const result = writeAgentServers(root, id, missing, opts);
+    if (result.failed) {
+      log.fail(`${target.title.padEnd(18)} ${target.file} — ${result.failed}`);
+      continue;
+    }
+    log.ok(`${target.title.padEnd(18)} ${target.file} — added ${result.written.join(", ")}`);
+  }
+
+  if (opts.dryRun) log.warn("Dry-run: nothing written.");
+  else log.dim("  Existing keys in those files were preserved; backups end in .claudeset.bak");
 }
 
 export function mcpAdd(
