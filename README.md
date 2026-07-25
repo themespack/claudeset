@@ -26,7 +26,8 @@ overwrites** what you already have.
 | `claudeset repair` | Recreate missing files without overwriting existing ones |
 | `claudeset update` | Refresh managed templates (prompt library, settings) |
 | `claudeset memory` | List memory files and create missing ones |
-| `claudeset mcp`    | Manage project-scoped MCP servers (`.mcp.json`) |
+| `claudeset mcp`    | Manage MCP servers (project, Claude Code user scope, or Zed) |
+| `claudeset global` | Share skills, instructions and MCP across every agent and project |
 | `claudeset hooks`  | Manage Claude Code hooks via presets |
 | `claudeset clean`  | Remove generated files (regenerable ones by default) |
 
@@ -51,6 +52,55 @@ claudeset mcp remove gh
 
 Writes to `.mcp.json` at the project root. Adding the same server twice is a
 no-op.
+
+Add `--scope user` to configure the server machine-wide instead, for every
+project you open:
+
+```bash
+claudeset mcp add gh "npx -y @modelcontextprotocol/server-github" --scope user
+claudeset mcp list --scope user
+claudeset mcp remove gh --scope user --target zed
+```
+
+| Scope / target | File | Key |
+|---|---|---|
+| `--scope project` (default) | `.mcp.json` | `mcpServers` |
+| `--scope user --target claude` | `~/.claude.json` | `mcpServers` |
+| `--scope user --target zed` | `~/.config/zed/settings.json` | `context_servers` |
+
+`--target` defaults to `both`. Zed's `settings.json` is JSONC, so it is edited by
+splicing text rather than re-serialising — your comments and formatting survive,
+and the previous file is kept as `settings.json.claudeset.bak`. If the file can't
+be parsed, claudeset prints the JSON to paste and changes nothing.
+
+### Global setup (Zed, Claude Code, any agent)
+
+```bash
+claudeset global          # set it up
+claudeset global --dry-run
+claudeset global status   # check only, exits 1 when something is off
+```
+
+Config that lives in your home directory is loaded automatically every time the
+editor starts — no per-project step, no daemon.
+
+| What | Where |
+|---|---|
+| Skills, shared by both agents | `~/.agents/skills` → symlink to `~/.claude/skills` |
+| Zed personal instructions | `~/.config/zed/AGENTS.md` |
+| Claude Code global instructions | `~/.claude/CLAUDE.md` |
+
+`global` never replaces an existing `~/.agents/skills` directory — if something
+is already there it reports the conflict and stops. Instruction files are only
+created when missing, so your edits are safe.
+
+`global status` also flags skills without a `SKILL.md` (Zed requires each skill
+to be a direct child of the skills root) and MCP servers configured for one
+agent but not the other.
+
+**Zed caveat:** Claude Agent running in Zed over ACP does not use Zed Skills or
+Zed agent profiles — it reads `CLAUDE.md` and `~/.claude/skills` itself. Zed MCP
+servers *may* be forwarded over ACP, which is why `--target both` is the default.
 
 ### Hooks
 

@@ -6,7 +6,8 @@ import { runDoctor } from "./commands/doctor.js";
 import { runRepair } from "./commands/repair.js";
 import { runUpdate } from "./commands/update.js";
 import { runMemory } from "./commands/memory.js";
-import { mcpAdd, mcpList, mcpRemove } from "./commands/mcp.js";
+import { mcpAdd, mcpList, mcpRemove, parseScope, parseTarget } from "./commands/mcp.js";
+import { runGlobal, runGlobalStatus } from "./commands/global.js";
 import { hooksAdd, hooksList } from "./commands/hooks.js";
 import { runClean } from "./commands/clean.js";
 import type { InitOptions } from "./types.js";
@@ -84,26 +85,59 @@ program
     await runMemory(process.cwd(), { yes: Boolean(o.yes), dryRun: Boolean(o.dryRun) });
   });
 
+const SCOPE_HELP = "project (.mcp.json) or user (machine-wide)";
+const TARGET_HELP = "with --scope user: claude, zed or both";
+
 const mcp = program
   .command("mcp")
-  .description("Manage project-scoped MCP servers (.mcp.json).");
+  .description("Manage MCP servers for the project, Claude Code or Zed.");
 mcp
   .command("list")
   .description("List configured MCP servers.")
-  .action(() => mcpList(process.cwd()));
+  .option("-s, --scope <scope>", SCOPE_HELP)
+  .option("-t, --target <target>", TARGET_HELP)
+  .action((o) => {
+    mcpList(process.cwd(), { scope: parseScope(o.scope), target: parseTarget(o.target) });
+  });
 mcp
   .command("add <name> <command...>")
   .description('Add an MCP server, e.g. `mcp add gh "npx -y @modelcontextprotocol/server-github"`.')
+  .option("-s, --scope <scope>", SCOPE_HELP)
+  .option("-t, --target <target>", TARGET_HELP)
   .option("--dry-run", "preview without writing", false)
   .action((name: string, command: string[], o) => {
-    mcpAdd(process.cwd(), name, command.join(" "), { dryRun: Boolean(o.dryRun) });
+    mcpAdd(process.cwd(), name, command.join(" "), {
+      dryRun: Boolean(o.dryRun),
+      scope: parseScope(o.scope),
+      target: parseTarget(o.target),
+    });
   });
 mcp
   .command("remove <name>")
   .description("Remove an MCP server.")
+  .option("-s, --scope <scope>", SCOPE_HELP)
+  .option("-t, --target <target>", TARGET_HELP)
   .option("--dry-run", "preview without writing", false)
   .action((name: string, o) => {
-    mcpRemove(process.cwd(), name, { dryRun: Boolean(o.dryRun) });
+    mcpRemove(process.cwd(), name, {
+      dryRun: Boolean(o.dryRun),
+      scope: parseScope(o.scope),
+      target: parseTarget(o.target),
+    });
+  });
+
+const globalCmd = program
+  .command("global")
+  .description("Share skills, instructions and MCP across every agent and project.")
+  .option("--dry-run", "show what would change without writing", false)
+  .action((o) => {
+    runGlobal({ dryRun: Boolean(o.dryRun) });
+  });
+globalCmd
+  .command("status")
+  .description("Check the machine-wide setup without changing anything.")
+  .action(() => {
+    process.exitCode = runGlobalStatus();
   });
 
 const hooks = program
