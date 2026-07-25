@@ -47,7 +47,8 @@ overwrites** what you already have.
 | `claudeset repair` | Recreate missing files without overwriting existing ones |
 | `claudeset update` | Refresh managed templates (prompt library, settings) |
 | `claudeset memory` | List memory files and create missing ones |
-| `claudeset mcp`    | Manage MCP servers (project, Claude Code user scope, or Zed) |
+| `claudeset mcp`    | Manage MCP servers: catalog, presets, project or machine-wide |
+| `claudeset skills` | Install skills from the catalog into `.claude/skills/` |
 | `claudeset global` | Share skills, instructions and MCP across every agent and project |
 | `claudeset hooks`  | Manage Claude Code hooks via presets |
 | `claudeset clean`  | Remove generated files (regenerable ones by default) |
@@ -55,13 +56,66 @@ overwrites** what you already have.
 ### `init` flags
 
 ```
--f, --force       overwrite existing files
--y, --yes         skip confirmation
-    --dry-run     preview changes, write nothing
-    --no-rtk      skip RTK memory + prompts
-    --caveman     force-enable Caveman scaffolding
-    --no-caveman  disable Caveman scaffolding
+-f, --force        overwrite existing files
+-y, --yes          skip confirmation
+    --dry-run      preview changes, write nothing
+    --no-rtk       skip RTK memory + prompts
+    --caveman      force-enable Caveman scaffolding
+    --no-caveman   disable Caveman scaffolding
+-p, --preset       standard, ultimate or none
+    --mcp <ids>    comma-separated MCP server ids
+    --skills <ids> comma-separated skill ids
 ```
+
+## Catalog
+
+`init` asks which MCP servers and skills to install. Pick a preset, choose
+individually, or take none — and add more at any time afterwards.
+
+| Preset | Contents |
+|---|---|
+| `standard` | 7 MCP servers, 8 skills. No API keys except GitHub, no extra runtimes beyond Node. |
+| `ultimate` | Everything: 15 servers, 17 skills. Expect API keys, `uv` and Docker. |
+| `none` | Nothing from the catalog. |
+
+Non-interactive runs (`-y`, `--dry-run`, piped stdin) default to `standard`.
+
+```bash
+claudeset init --preset ultimate
+claudeset init --preset none --skills typescript,react --mcp filesystem,context7
+```
+
+### MCP catalog
+
+Filesystem · Git · GitHub · Context7 · Fetch · Memory · Sequential Thinking ·
+Playwright · PostgreSQL · Docker · Cloudflare · OpenAPI · Prisma · Brave Search ·
+Tavily
+
+```bash
+claudeset mcp catalog                     # what exists, what is installed
+claudeset mcp add playwright              # one server, by catalog id
+claudeset mcp add --preset standard       # a whole preset
+claudeset mcp add context7 --scope user   # machine-wide instead of this project
+```
+
+Servers needing an API key or a non-Node runtime are marked in the catalog.
+After installing, claudeset prints the environment variables to set and warns
+when `uv` or `docker` is missing — it never writes secrets anywhere.
+
+### Skill catalog
+
+RTK · Caveman · Clean Architecture · Code Review · Refactoring · TypeScript ·
+React · TanStack · Cloudflare Workers · API Design · Security · Performance ·
+Testing · Documentation · Git Workflow · Database Design · Debugging
+
+```bash
+claudeset skills list                     # catalog + what this project has
+claudeset skills add typescript react
+claudeset skills add --preset ultimate
+```
+
+Skills are copied into `.claude/skills/<id>/SKILL.md`, so they are yours to
+edit — `claudeset` will not overwrite them unless you pass `--force`.
 
 ### MCP servers
 

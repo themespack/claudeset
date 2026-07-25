@@ -45,4 +45,9 @@ export interface InitOptions {
   caveman: boolean | "auto";
   yes: boolean;
   dryRun: boolean;
+  /** Catalog preset; omitted means ask, or `standard` when non-interactive. */
+  preset?: "standard" | "ultimate" | "none";
+  /** Explicit catalog ids, which skip the picker. */
+  mcp?: string[];
+  skills?: string[];
 }

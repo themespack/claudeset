@@ -9,6 +9,9 @@ import {
 import { addZedServer, readZedServers, removeZedServer } from "../global/zed.js";
 import { addUserServer, readUserServers, removeUserServer } from "../global/user-mcp.js";
 import { claudeConfigPath, zedSettingsPath } from "../global/paths.js";
+import { MCP_CATALOG, resolveServer } from "../catalog/mcp.js";
+import { PRESETS, resolvePreset, type PresetName } from "../catalog/presets.js";
+import { installMcp, missingRuntimes, requiredEnv } from "../catalog/install.js";
 import { log } from "../utils/log.js";
 
 /** `project` writes `.mcp.json`; `user` writes the machine-wide configs. */
@@ -73,6 +76,70 @@ export function mcpList(root: string, opts: McpOptions = {}): void {
     else {
       for (const [name, s] of Object.entries(servers)) printServer(name, s as McpServer);
     }
+  }
+}
+
+/** List the curated catalog, marking what this project already has. */
+export function mcpCatalog(root: string): void {
+  const installed = new Set(Object.keys(listServers(root)));
+
+  log.title(`MCP catalog (${installed.size} installed in .mcp.json)`);
+  for (const entry of MCP_CATALOG) {
+    const mark = installed.has(entry.id) ? chalk.green("✔") : chalk.dim("·");
+    const needs = entry.requiresEnv?.length ? chalk.yellow(" [needs key]") : "";
+    const runtime = entry.runtime === "node" ? "" : chalk.yellow(` [${entry.runtime}]`);
+    log.info(
+      `  ${mark} ${chalk.cyan(entry.id.padEnd(20))} ${chalk.dim(entry.description)}${needs}${runtime}`,
+    );
+  }
+
+  log.title("Presets");
+  for (const preset of Object.values(PRESETS)) {
+    log.info(
+      `  ${chalk.cyan(preset.name.padEnd(10))} ${preset.mcp.length} servers — ${chalk.dim(preset.description)}`,
+    );
+  }
+}
+
+/** Install catalog servers by id, or a whole preset. */
+export function mcpInstall(
+  root: string,
+  ids: string[],
+  opts: McpOptions & { preset?: PresetName } = {},
+): void {
+  const selected = [...new Set([...(opts.preset ? resolvePreset(opts.preset).mcp : []), ...ids])];
+  if (selected.length === 0) {
+    log.warn("Nothing to add. Pass server ids or --preset standard|ultimate.");
+    return;
+  }
+
+  const results = installMcp(root, selected, opts);
+  log.title(`MCP servers (${results.length})`);
+  for (const { entry, written } of results) {
+    const server = resolveServer(entry, root);
+    printServer(entry.id, server);
+    log.dim(`  ${" ".repeat(16)} → ${written.join(", ")}`);
+    if (entry.note) log.dim(`  ${" ".repeat(16)}   ${entry.note}`);
+  }
+  reportPrerequisites(selected);
+  if (opts.dryRun) log.warn("Dry-run: nothing written.");
+}
+
+/** API keys and runtimes are the user's job — claudeset never writes secrets. */
+export function reportPrerequisites(ids: string[]): void {
+  const env = requiredEnv(ids);
+  if (env.length) {
+    log.title("Set these before the servers will start");
+    for (const e of env) {
+      log.info(`  ${chalk.cyan(e.name.padEnd(32))} ${chalk.dim(`${e.server} — ${e.hint}`)}`);
+    }
+    log.dim("  Export them in your shell profile. Never commit them.");
+  }
+
+  for (const missing of missingRuntimes(ids)) {
+    log.warn(
+      `${missing.runtime} not found on PATH — ${missing.servers.join(", ")} will not start. ${missing.hint}`,
+    );
   }
 }
 
