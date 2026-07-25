@@ -5,14 +5,16 @@ import { exists, writeIfAbsent } from "../utils/fs.js";
 import { readTemplate } from "../template/index.js";
 import { log, actionLabel } from "../utils/log.js";
 import { linkSkills, invalidSkills, listSkills } from "../global/skills.js";
-import { readZedServers } from "../global/zed.js";
-import { readUserServers } from "../global/user-mcp.js";
 import {
-  claudeConfigPath,
-  claudeMdPath,
-  zedAgentsMdPath,
-  zedSettingsPath,
-} from "../global/paths.js";
+  USER_SCOPE_AGENTS,
+  findAgent,
+  readAgentServersAt,
+  userConfigPath,
+  writeAgentServersAt,
+  type AgentId,
+} from "../agents/targets.js";
+import type { McpServer } from "../mcp/index.js";
+import { claudeMdPath, zedAgentsMdPath } from "../global/paths.js";
 
 /** Render `~/…` so output stays readable. */
 function tilde(p: string): string {
@@ -71,28 +73,97 @@ export function runGlobal(opts: { dryRun?: boolean } = {}): void {
   else log.ok("Global setup complete. Restart Zed to pick it up.");
 }
 
+interface Snapshot {
+  id: AgentId;
+  title: string;
+  path: string;
+  servers: Record<string, McpServer> | null;
+}
+
+function snapshot(): Snapshot[] {
+  return USER_SCOPE_AGENTS.map((id) => {
+    const path = userConfigPath(id)!;
+    return {
+      id,
+      title: findAgent(id)!.title,
+      path,
+      servers: readAgentServersAt(path, id),
+    };
+  });
+}
+
 function printMcp(): void {
-  const zed = readZedServers();
-  const user = readUserServers();
+  const snaps = snapshot();
+  for (const snap of snaps) {
+    if (snap.servers === null) log.fail(`${tilde(snap.path)} could not be parsed`);
+    else log.info(`  ${snap.title.padEnd(14)} (${tilde(snap.path)}): ${fmt(Object.keys(snap.servers))}`);
+  }
 
-  if (zed === null) log.fail(`${tilde(zedSettingsPath())} is not valid JSON/JSONC`);
-  else log.info(`  Zed  (${tilde(zedSettingsPath())}): ${fmt(Object.keys(zed))}`);
-
-  if (user === null) log.fail(`${tilde(claudeConfigPath())} is not valid JSON`);
-  else log.info(`  Claude (${tilde(claudeConfigPath())}): ${fmt(Object.keys(user))}`);
-
-  if (zed && user) {
-    const zedNames = new Set(Object.keys(zed));
-    const userNames = new Set(Object.keys(user));
-    const drift = [
-      ...[...userNames].filter((n) => !zedNames.has(n)).map((n) => `${n} (Claude only)`),
-      ...[...zedNames].filter((n) => !userNames.has(n)).map((n) => `${n} (Zed only)`),
-    ];
-    if (drift.length) {
-      log.warn(`Drift: ${drift.join(", ")}`);
-      log.dim("    Fix with: claudeset mcp add <name> <command> --scope user --target both");
+  // Drift: any server present in one agent but missing in another.
+  const readable = snaps.filter((s): s is Snapshot & { servers: Record<string, McpServer> } => s.servers !== null);
+  const allNames = new Set(readable.flatMap((s) => Object.keys(s.servers)));
+  const drift: string[] = [];
+  for (const name of allNames) {
+    const missing = readable.filter((s) => !(name in s.servers)).map((s) => s.title);
+    if (missing.length && missing.length < readable.length) {
+      drift.push(`${name} (missing in ${missing.join(", ")})`);
     }
   }
+  if (drift.length) {
+    log.warn(`Drift: ${drift.join("; ")}`);
+    log.dim("    Fix with: claudeset global sync-mcp   (or: mcp add <name> <cmd> --scope user --target all)");
+  }
+}
+
+/**
+ * Mirror one agent's user-scope servers into every other user-scope agent, so
+ * running Claude with a set of MCP servers also lights them up in Cursor, Gemini,
+ * Zed and Codex globally. `source` defaults to whichever config has the most.
+ */
+export function runGlobalSyncMcp(opts: { dryRun?: boolean; source?: AgentId } = {}): void {
+  const snaps = snapshot();
+  const readable = snaps.filter((s): s is Snapshot & { servers: Record<string, McpServer> } => s.servers !== null);
+  if (readable.length === 0) {
+    log.fail("No readable user-scope config found.");
+    return;
+  }
+
+  const source =
+    opts.source !== undefined
+      ? readable.find((s) => s.id === opts.source)
+      : [...readable].sort((a, b) => Object.keys(b.servers).length - Object.keys(a.servers).length)[0];
+  if (!source) {
+    log.fail(`Source agent "${opts.source}" has no readable config.`);
+    return;
+  }
+
+  const names = Object.keys(source.servers);
+  log.title(`Global MCP sync from ${source.title} (${names.length} server(s))`);
+  if (names.length === 0) {
+    log.warn(`${source.title} has no servers to copy.`);
+    return;
+  }
+
+  for (const target of snaps) {
+    if (target.id === source.id) continue;
+    if (target.servers === null) {
+      log.fail(`${target.title.padEnd(14)} ${tilde(target.path)} — unreadable, left untouched`);
+      continue;
+    }
+    const missing = Object.fromEntries(
+      names.filter((n) => !(n in (target.servers as Record<string, McpServer>))).map((n) => [n, source.servers[n]]),
+    );
+    if (Object.keys(missing).length === 0) {
+      log.ok(`${target.title.padEnd(14)} ${tilde(target.path)} — already in sync`);
+      continue;
+    }
+    const result = writeAgentServersAt(target.path, target.id, missing, { dryRun: opts.dryRun });
+    if (result.failed) log.fail(`${target.title.padEnd(14)} ${tilde(target.path)} — ${result.failed}`);
+    else log.ok(`${target.title.padEnd(14)} ${tilde(target.path)} — added ${result.written.join(", ")}`);
+  }
+
+  if (opts.dryRun) log.warn("Dry-run: nothing written.");
+  else log.dim("  Restart affected agents to load the new servers.");
 }
 
 function fmt(names: string[]): string {

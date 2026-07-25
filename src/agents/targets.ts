@@ -1,9 +1,12 @@
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { writeFileSync, copyFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { exists, read, ensureDir } from "../utils/fs.js";
 import { parseJsonc } from "../global/jsonc.js";
 import { addZedServer, readZedServers } from "../global/zed.js";
+import { addUserServer, readUserServers } from "../global/user-mcp.js";
+import { zedSettingsPath, claudeConfigPath } from "../global/paths.js";
 import type { McpServer } from "../mcp/index.js";
 
 /**
@@ -35,6 +38,30 @@ export function findAgent(id: string): AgentTarget | undefined {
   return AGENT_TARGETS.find((t) => t.id === id);
 }
 
+/**
+ * Machine-wide config path each agent reads for MCP servers, or `null` when the
+ * agent does not surface user-scope MCP through a dedicated file (VS Code buries
+ * it inside its main settings.json, which claudeset does not touch).
+ */
+export function userConfigPath(id: AgentId): string | null {
+  switch (id) {
+    case "claude":
+      return claudeConfigPath();
+    case "zed":
+      return zedSettingsPath();
+    case "cursor":
+      return join(homedir(), ".cursor", "mcp.json");
+    case "gemini":
+      return join(homedir(), ".gemini", "settings.json");
+    case "codex":
+      return join(homedir(), ".codex", "config.toml");
+    case "vscode":
+      return null;
+  }
+}
+
+export const USER_SCOPE_AGENTS: AgentId[] = ["claude", "cursor", "gemini", "zed", "codex"];
+
 export function parseAgents(value: string | undefined): AgentId[] {
   if (!value) return AGENT_TARGETS.map((t) => t.id);
   const ids = value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -58,19 +85,16 @@ function writeJson(path: string, data: unknown, dryRun?: boolean): void {
   writeFileSync(path, JSON.stringify(data, null, 2) + "\n", "utf8");
 }
 
-/** Read whichever servers an agent's config currently declares, or null when unreadable. */
-export function readAgentServers(
-  root: string,
+/** Read servers from an explicit path, using the schema for `id`. */
+export function readAgentServersAt(
+  path: string,
   id: AgentId,
 ): Record<string, McpServer> | null {
   const target = findAgent(id)!;
-  const path = join(root, target.file);
 
-  if (id === "zed") {
-    const servers = readZedServers(path);
-    return servers as Record<string, McpServer> | null;
-  }
+  if (id === "zed") return readZedServers(path) as Record<string, McpServer> | null;
   if (id === "codex") return readCodexServers(path);
+  if (id === "claude") return readUserServers(path);
   if (!exists(path)) return {};
 
   const parsed = parseJsonc<Record<string, unknown>>(read(path));
@@ -80,18 +104,14 @@ export function readAgentServers(
   return section as Record<string, McpServer>;
 }
 
-/**
- * Write servers into one agent's config, preserving keys claudeset does not own.
- * Returns the ids actually written.
- */
-export function writeAgentServers(
-  root: string,
+/** Write servers to an explicit path, using the schema for `id`. */
+export function writeAgentServersAt(
+  path: string,
   id: AgentId,
   servers: Record<string, McpServer>,
   opts: { dryRun?: boolean } = {},
 ): { written: string[]; failed?: string } {
   const target = findAgent(id)!;
-  const path = join(root, target.file);
   const names = Object.keys(servers);
 
   if (id === "zed") {
@@ -104,6 +124,14 @@ export function writeAgentServers(
 
   if (id === "codex") return writeCodexServers(path, servers, opts);
 
+  if (id === "claude") {
+    for (const name of names) {
+      const change = addUserServer(name, servers[name], { path, dryRun: opts.dryRun });
+      if (change === "unparsable") return { written: [], failed: "not valid JSON" };
+    }
+    return { written: names };
+  }
+
   const existing = exists(path) ? parseJsonc<Record<string, unknown>>(read(path)) : {};
   if (!existing) return { written: [], failed: "not valid JSON" };
 
@@ -114,6 +142,19 @@ export function writeAgentServers(
   }
   writeJson(path, { ...existing, [target.key]: section }, opts.dryRun);
   return { written: names };
+}
+
+/** Project-scoped convenience wrapper — path derived from the agent's default file. */
+export function readAgentServers(root: string, id: AgentId) {
+  return readAgentServersAt(join(root, findAgent(id)!.file), id);
+}
+export function writeAgentServers(
+  root: string,
+  id: AgentId,
+  servers: Record<string, McpServer>,
+  opts: { dryRun?: boolean } = {},
+) {
+  return writeAgentServersAt(join(root, findAgent(id)!.file), id, servers, opts);
 }
 
 // --- Codex TOML -------------------------------------------------------------

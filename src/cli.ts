@@ -17,11 +17,11 @@ import {
   parseTarget,
 } from "./commands/mcp.js";
 import { skillsAdd, skillsList } from "./commands/skills.js";
-import { runGlobal, runGlobalStatus } from "./commands/global.js";
+import { runGlobal, runGlobalStatus, runGlobalSyncMcp } from "./commands/global.js";
 import { MCP_CATALOG } from "./catalog/mcp.js";
 import { SKILL_CATALOG } from "./catalog/skills.js";
 import { parseIds, parsePreset } from "./catalog/presets.js";
-import { parseAgents } from "./agents/targets.js";
+import { parseAgents, findAgent, type AgentId } from "./agents/targets.js";
 import { hooksAdd, hooksList } from "./commands/hooks.js";
 import { runClean } from "./commands/clean.js";
 import type { InitOptions } from "./types.js";
@@ -198,11 +198,34 @@ const globalCmd = program
   .action((o) => {
     runGlobal({ dryRun: Boolean(o.dryRun) });
   });
+
+/**
+ * Commander gives a parent's option priority over a subcommand's when the flag
+ * names collide, so `global sync-mcp --dry-run` ends up on the parent's opts.
+ * Read from there to make the flag work no matter where it appears.
+ */
+function inheritedDryRun(subOpts: { dryRun?: boolean }, cmd: { parent?: { opts(): { dryRun?: boolean } } }): boolean {
+  return Boolean(subOpts.dryRun || cmd.parent?.opts().dryRun);
+}
 globalCmd
   .command("status")
   .description("Check the machine-wide setup without changing anything.")
   .action(() => {
     process.exitCode = runGlobalStatus();
+  });
+globalCmd
+  .command("sync-mcp")
+  .description("Copy user-scope MCP servers between Claude, Cursor, Gemini, Zed and Codex.")
+  .option("--from <agent>", "source agent (default: the one with the most servers)")
+  .option("--dry-run", "preview without writing", false)
+  .action((o, cmd) => {
+    let source: AgentId | undefined;
+    if (o.from !== undefined) {
+      const target = findAgent(o.from);
+      if (!target) throw new Error(`Unknown --from "${o.from}".`);
+      source = target.id;
+    }
+    runGlobalSyncMcp({ dryRun: inheritedDryRun(o, cmd), source });
   });
 
 const hooks = program

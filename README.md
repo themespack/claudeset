@@ -181,10 +181,31 @@ be parsed, claudeset prints the JSON to paste and changes nothing.
 ### Global setup (Zed, Claude Code, any agent)
 
 ```bash
-claudeset global          # set it up
+claudeset global               # set it up
 claudeset global --dry-run
-claudeset global status   # check only, exits 1 when something is off
+claudeset global status        # check only, exits 1 when something is off
+claudeset global sync-mcp      # copy user-scope MCP servers between agents
+claudeset global sync-mcp --from claude --dry-run
 ```
+
+`global sync-mcp` mirrors user-scope MCP servers across Claude Code, Cursor,
+Gemini CLI, Zed and Codex CLI (the agents that expose MCP through a dedicated
+file). It writes:
+
+| Agent | User-scope file | Key |
+|---|---|---|
+| Claude Code | `~/.claude.json` | `mcpServers` |
+| Cursor | `~/.cursor/mcp.json` | `mcpServers` |
+| Gemini CLI | `~/.gemini/settings.json` | `mcpServers` |
+| Zed | `~/.config/zed/settings.json` | `context_servers` |
+| Codex CLI | `~/.codex/config.toml` | `[mcp_servers.*]` tables |
+
+Source defaults to whichever config already has the most servers; pass
+`--from claude` (or `zed`, `cursor`, `gemini`, `codex`) to pick one. Existing
+servers survive, unreadable files are reported rather than overwritten.
+
+VS Code stores MCP under user `settings.json`, which claudeset does not touch;
+add those through Copilot's own UI.
 
 Config that lives in your home directory is loaded automatically every time the
 editor starts — no per-project step, no daemon.
