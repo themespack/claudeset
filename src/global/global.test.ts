@@ -1,10 +1,20 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  readlinkSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { maskComments, parseJsonc, topLevelValueStart, matchBrace } from "./jsonc.js";
 import { addZedServer, removeZedServer, readZedServers } from "./zed.js";
 import { addUserServer, removeUserServer, readUserServers } from "./user-mcp.js";
+import { linkProjectSkills, invalidSkills, listSkills } from "./skills.js";
 
 let dir: string;
 let settings: string;
@@ -119,6 +129,40 @@ describe("zed settings", () => {
     expect(removeZedServer("gh", { path: settings }).change).toBe("removed");
     expect(Object.keys(readZedServers(settings)!)).toEqual(["fs"]);
     expect(removeZedServer("gh", { path: settings }).change).toBe("absent");
+  });
+});
+
+describe("project skills link", () => {
+  it("creates a relative symlink and is idempotent", () => {
+    expect(linkProjectSkills(dir).status).toBe("linked");
+    const link = join(dir, ".agents", "skills");
+    expect(readlinkSync(link)).toBe(join("..", ".claude", "skills"));
+    expect(existsSync(join(dir, ".claude", "skills"))).toBe(true);
+    expect(linkProjectSkills(dir).status).toBe("already-linked");
+  });
+
+  it("survives the project being moved", () => {
+    linkProjectSkills(dir);
+    writeFileSync(join(dir, ".claude", "skills", "marker"), "x");
+    const moved = dir + "-moved";
+    renameSync(dir, moved);
+    expect(existsSync(join(moved, ".agents", "skills", "marker"))).toBe(true);
+    rmSync(moved, { recursive: true, force: true });
+  });
+
+  it("never replaces an existing directory", () => {
+    mkdirSync(join(dir, ".agents", "skills"), { recursive: true });
+    expect(linkProjectSkills(dir).status).toBe("conflict");
+  });
+
+  it("reports skills that Zed would skip", () => {
+    const skills = join(dir, ".claude", "skills");
+    mkdirSync(join(skills, "good"), { recursive: true });
+    writeFileSync(join(skills, "good", "SKILL.md"), "---\nname: good\n---\n");
+    mkdirSync(join(skills, "broken"));
+    writeFileSync(join(skills, "README.md"), "not a skill");
+    expect(listSkills(skills)).toEqual(["broken", "good"]);
+    expect(invalidSkills(skills)).toEqual(["broken"]);
   });
 });
 

@@ -5,8 +5,26 @@ import { buildVars, copyTemplateTree, readTemplate } from "../template/index.js"
 import { mergeJsonFile } from "../merge/index.js";
 import { installRtk, installCaveman } from "../memory/index.js";
 import { printResults } from "./summary.js";
-import { log } from "../utils/log.js";
+import { linkProjectSkills, type LinkResult } from "../global/skills.js";
+import { actionLabel, log } from "../utils/log.js";
 import type { InitOptions, WriteResult } from "../types.js";
+
+/** The skills symlink is not a file write, so it reports itself. */
+function reportSkillLink(link: LinkResult): void {
+  switch (link.status) {
+    case "linked":
+      log.info(`  ${actionLabel("created").padEnd(18)} .agents/skills -> .claude/skills`);
+      break;
+    case "conflict":
+      log.warn(".agents/skills already exists — left alone");
+      break;
+    case "unsupported":
+      log.warn(".agents/skills symlink not supported here; Zed will not see project skills");
+      break;
+    default:
+      break;
+  }
+}
 
 export async function runInit(root: string, opts: InitOptions): Promise<void> {
   const caveman =
@@ -50,6 +68,11 @@ export async function runInit(root: string, opts: InitOptions): Promise<void> {
     ),
   );
   results.push(...copyTemplateTree("claude/commands", join(root, ".claude", "commands"), vars, writeOpts));
+
+  // 2b. Project skills, plus the `.agents/skills` alias Zed's agent reads.
+  log.step("skills");
+  results.push(...copyTemplateTree("claude/skills", join(root, ".claude", "skills"), vars, writeOpts));
+  reportSkillLink(linkProjectSkills(root, { dryRun: opts.dryRun }));
 
   // 3. RTK memory + prompt library.
   if (info.rtk) {

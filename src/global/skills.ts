@@ -1,5 +1,5 @@
 import { lstatSync, readlinkSync, symlinkSync, readdirSync, existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { ensureDir, exists } from "../utils/fs.js";
 import { agentSkillsDir, claudeSkillsDir } from "./paths.js";
 
@@ -7,7 +7,8 @@ export type LinkStatus =
   | "linked" // we created the symlink
   | "already-linked" // symlink already points at the source
   | "conflict" // a real directory (or foreign symlink) is in the way
-  | "no-source"; // nothing to link from
+  | "no-source" // nothing to link from
+  | "unsupported"; // the platform refused the symlink (Windows without privilege)
 
 export interface LinkResult {
   status: LinkStatus;
@@ -27,12 +28,14 @@ function linkTarget(p: string): string | null {
 }
 
 /**
- * Point `~/.agents/skills` at `~/.claude/skills` so Zed's agent and Claude Code
- * load the same skills. An existing real directory is never replaced.
+ * Point a skills root at another one, creating the source when missing.
+ * An existing real directory (or a symlink elsewhere) is never replaced.
  */
-export function linkSkills(opts: { dryRun?: boolean } = {}): LinkResult {
-  const source = claudeSkillsDir();
-  const target = agentSkillsDir();
+export function linkSkillsDir(
+  source: string,
+  target: string,
+  opts: { dryRun?: boolean; relative?: boolean } = {},
+): LinkResult {
   const base = { source, target };
 
   if (!exists(source)) {
@@ -50,9 +53,32 @@ export function linkSkills(opts: { dryRun?: boolean } = {}): LinkResult {
 
   if (!opts.dryRun) {
     ensureDir(dirname(target));
-    symlinkSync(source, target, "dir");
+    // A relative link survives the repo being cloned or moved elsewhere.
+    const linkPath = opts.relative ? relative(dirname(target), source) : source;
+    try {
+      symlinkSync(linkPath, target, "junction");
+    } catch {
+      // Windows refuses symlinks without developer mode or admin rights.
+      return { ...base, status: "unsupported" };
+    }
   }
   return { ...base, status: "linked" };
+}
+
+/**
+ * Point `~/.agents/skills` at `~/.claude/skills` so Zed's agent and Claude Code
+ * load the same skills.
+ */
+export function linkSkills(opts: { dryRun?: boolean } = {}): LinkResult {
+  return linkSkillsDir(claudeSkillsDir(), agentSkillsDir(), opts);
+}
+
+/** Same idea, one project down: `<root>/.agents/skills` → `<root>/.claude/skills`. */
+export function linkProjectSkills(root: string, opts: { dryRun?: boolean } = {}): LinkResult {
+  return linkSkillsDir(join(root, ".claude", "skills"), join(root, ".agents", "skills"), {
+    ...opts,
+    relative: true,
+  });
 }
 
 /**

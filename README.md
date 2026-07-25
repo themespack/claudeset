@@ -163,9 +163,27 @@ RTK.md                 # explains the memory + prompt system
   commands/
   memories/            # architecture, coding-style, stack, project, todo
   prompts/             # @debug @refactor @review @design @security @performance
+  skills/              # project skills, one folder + SKILL.md each
+.agents/
+  skills -> ../.claude/skills   # same skills, where Zed's agent looks
 .mcp.json              # only when you add MCP servers
 .caveman/              # only when Caveman is enabled/detected
 ```
+
+### Skills
+
+Project skills live in `.claude/skills/<name>/SKILL.md` and are committed with
+the repo, so everyone gets the same ones. Personal skills stay in
+`~/.claude/skills` (see `claudeset global`).
+
+`.agents/skills` is a **relative** symlink to `.claude/skills` — Claude Code
+reads the first path, Zed's agent reads the second, and one folder serves both.
+Being relative, it survives a clone or a move. On Windows a directory junction
+is used; if the platform refuses it, `init` says so and only Claude Code sees
+the skills.
+
+`claudeset doctor` reports how many skills are present and names any folder
+missing its `SKILL.md` — those are silently skipped by both agents.
 
 ## Idempotency
 

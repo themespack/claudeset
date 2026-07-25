@@ -7,6 +7,7 @@ import { RTK_PROMPT_DIR } from "../memory/rtk.js";
 import { CAVEMAN_DIR } from "../memory/caveman.js";
 import { listServers } from "../mcp/index.js";
 import { listHooks } from "../hooks/index.js";
+import { invalidSkills, listSkills } from "../global/skills.js";
 import { log } from "../utils/log.js";
 import type { CheckResult } from "../types.js";
 
@@ -55,6 +56,24 @@ export function runDoctor(root: string): number {
         label: RTK_PROMPT_DIR,
         ok: exists(join(root, RTK_PROMPT_DIR)),
         detail: exists(join(root, RTK_PROMPT_DIR)) ? undefined : "missing",
+      },
+    ],
+  ]);
+
+  const skillsDir = join(root, ".claude", "skills");
+  const badSkills = invalidSkills(skillsDir);
+  groups.push([
+    "Skills",
+    [
+      {
+        label: ".claude/skills",
+        ok: exists(skillsDir),
+        detail: exists(skillsDir) ? `${listSkills(skillsDir).length} skill(s)` : "missing",
+      },
+      {
+        label: "every skill has a SKILL.md",
+        ok: badSkills.length === 0,
+        detail: badSkills.length ? badSkills.join(", ") : undefined,
       },
     ],
   ]);
